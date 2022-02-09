@@ -19,22 +19,19 @@ class AutoencoderDataset(Dataset):
        csv_file: path to csv file with image_path and label
        df: a pandas dataframe with image_path column
     """
-    def __init__(self, df, image_size=10, config=None):
+    def __init__(self, df, config=None):
         self.annotations = df
         self.config = config 
-        if self.config:
-            self.image_size = config["image_size"]
-        else:
-            self.image_size = image_size
-        
+        self.image_size = config["image_size"]
+ 
         #Create augmentor
-        self.transformer = augmentation.train_augmentation(image_size=image_size)
+        self.transformer = augmentation.train_augmentation(image_size=self.image_size)
         
         #Pin data to memory if desired
         if self.config["preload_images"]:
             self.image_dict = {}
             for index, row in self.annotations.iterrows():
-                self.image_dict[index] = utils.load_image(row["image_path"], image_size=image_size)
+                self.image_dict[index] = utils.load_image(row["image_path"], image_size=self.image_size)
         
     def __len__(self):
         #0th based index

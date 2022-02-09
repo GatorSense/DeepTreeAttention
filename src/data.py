@@ -194,26 +194,23 @@ class TreeDataset(Dataset):
     Args:
        csv_file: path to csv file with image_path and label
     """
-    def __init__(self, csv_file, image_size=10, config=None, train=True, HSI=True, metadata=False):
+    def __init__(self, csv_file, config=None, train=True, HSI=True, metadata=False):
         self.annotations = pd.read_csv(csv_file)
         self.train = train
         self.HSI = HSI
         self.metadata = metadata
         self.config = config 
         
-        if self.config:
-            self.image_size = config["image_size"]
-        else:
-            self.image_size = image_size
+        self.image_size = config["image_size"]
         
         #Create augmentor
-        self.transformer = augmentation.train_augmentation(image_size=image_size)
+        self.transformer = augmentation.train_augmentation(image_size=config["image_size"])
         
         #Pin data to memory if desired
         if self.config["preload_images"]:
             self.image_dict = {}
             for index, row in self.annotations.iterrows():
-                self.image_dict[index] = load_image(row["image_path"], image_size=image_size)
+                self.image_dict[index] = load_image(row["image_path"], image_size=config["image_size"])
         
     def __len__(self):
         #0th based index
