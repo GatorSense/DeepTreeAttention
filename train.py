@@ -60,7 +60,7 @@ trainer = Trainer(
 with comet_logger.experiment.context_manager("autoencoder"):
     trainer.fit(autoencoder_model)
 
-model = Hang2020.Hang2020(classes=data_module.num_classes, bands=config["autoencoder_depth"])
+model = autoencoder.classifier(classes=data_module.num_classes, config=config)
 m = main.TreeModel(
     model=model, 
     classes=data_module.num_classes, 

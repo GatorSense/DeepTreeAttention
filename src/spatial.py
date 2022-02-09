@@ -7,7 +7,7 @@ from src.data import preprocess_image
 import torch
 from torchvision import transforms
 
-def spatial_neighbors(gdf, buffer, data_dir, HSI_pool, model, image_size):
+def spatial_neighbors(gdf, buffer, data_dir, HSI_pool, autoencoder, model, image_size):
     """    
     #Get all neighbors within n meters of each point.
     Args:
@@ -44,7 +44,8 @@ def spatial_neighbors(gdf, buffer, data_dir, HSI_pool, model, image_size):
             img_crop = transforms.functional.resize(img_crop, size=(image_size,image_size), interpolation=transforms.InterpolationMode.NEAREST)
             img_crop = torch.tensor(img_crop,device=model.device, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
-                score = model.model(img_crop)
+                reconstruction, bottleneck = autoencoder(img_crop)
+                score = model.model(bottleneck)
             scores.append(score)
         
         if len(scores) == 0:

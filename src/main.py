@@ -341,6 +341,7 @@ class TreeModel(LightningModule):
             model = self,
             data_dir = "{}/data/".format(self.ROOT),
             image_size=self.config["image_size"],
+            autoencoder=self.autoencoder_model,
             HSI_pool=HSI_pool)        
         
         #Spatial function

@@ -179,3 +179,19 @@ class autoencoder(LightningModule):
                                                          eps=1e-08)
                                                                  
         return {'optimizer':optimizer, 'lr_scheduler': scheduler,"monitor":'val_loss'}
+    
+
+class classifier(nn.Module):
+    def __init__(self, classes, config):
+        super(classifier, self).__init__()    
+        in_size = config["image_size"] * config["image_size"] * config["autoencoder_depth"]
+        self.fc1 = nn.Linear(in_features=in_size, out_features=classes)
+        self.batchnorm1 = nn.BatchNorm1d(classes)
+        
+    def forward(self, x):
+        x = x.flatten(start_dim=1)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.batchnorm1(x)
+
+        return x
