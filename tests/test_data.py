@@ -15,7 +15,7 @@ def test_TreeData_setup(config, ROOT):
     assert not test.empty
     assert not train.empty
     assert not any([x in train.image_path.unique() for x in test.image_path.unique()])
-    assert all([x in ["image_path","label","site","taxonID","siteID","plotID","individualID","point_id","box_id","RGB_tile"] for x in train.columns])
+    assert all([x in ["image_path","label","site","taxonID","siteID","plotID","individualID","point_id","box_id","RGB_tile","RGB_image_path"] for x in train.columns])
     
 def test_TreeDataset(dm, config,tmpdir, ROOT):
     #Train loader
@@ -24,6 +24,9 @@ def test_TreeDataset(dm, config,tmpdir, ROOT):
     image = inputs["HSI"]
     assert image.shape == (3, config["image_size"], config["image_size"])
     
+    image = inputs["RGB"]
+    assert image.shape == (3, config["image_size"], config["image_size"])
+        
     #Test loader
     data_loader = data.TreeDataset(csv_file="{}/tests/data/processed/test.csv".format(ROOT), train=False, config=config)    
     annotations = pd.read_csv("{}/tests/data/processed/test.csv".format(ROOT))

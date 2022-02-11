@@ -16,10 +16,10 @@ class RGB(nn.Module):
     
 class RGB_sensor_fusion(nn.Module):
     """A joint fusion model of HSI sensor data and metadata"""
-    def __init__(self, bands, sites, classes):
+    def __init__(self, bands, classes):
         super(RGB_sensor_fusion,self).__init__()   
-        self.RGB = RGB(classes)
-        self.sensor_model = Hang2020(bands, classes)
+        self.RGB = Hang2020.Hang2020(bands=3, classes=classes)
+        self.sensor_model = Hang2020.Hang2020(bands, classes)
                 
         #Fully connected concat learner
         self.fc1 = nn.Linear(in_features = classes *2 , out_features = classes)

@@ -212,8 +212,12 @@ class TreeDataset(Dataset):
         #Pin data to memory if desired
         if self.config["preload_images"]:
             self.image_dict = {}
+            self.RGB_image_dict = {}
+            
             for index, row in self.annotations.iterrows():
                 self.image_dict[index] = load_image(row["image_path"], image_size=image_size)
+                self.RGB_image_dict[index] = load_image(row["RGB_image_path"], image_size=self.image_size)
+                
         
     def __len__(self):
         #0th based index
@@ -226,10 +230,14 @@ class TreeDataset(Dataset):
         if self.HSI:
             if self.config["preload_images"]:
                 inputs["HSI"] = self.image_dict[index]
+                inputs["RGB"] = self.RGB_image_dict[index]
             else:
-                image_path = self.annotations.image_path.loc[index]            
+                image_path = self.annotations.image_path.loc[index] 
+                RGB_image_path = self.annotations.RGB_image_path.loc[index]            
                 image = load_image(image_path, image_size=self.image_size)
                 inputs["HSI"] = image
+                inputs["RGB"] = load_image(RGB_image_path, image_size=self.image_size)
+                
             
         if self.metadata:
             site = self.annotations.site.loc[index]  
@@ -240,8 +248,10 @@ class TreeDataset(Dataset):
             label = self.annotations.label.loc[index]
             label = torch.tensor(label, dtype=torch.long)
             
-            if self.HSI:
-                inputs["HSI"] = self.transformer(inputs["HSI"])
+            #For the moment, no augmentation
+            #if self.HSI:
+                #inputs["HSI"] = self.transformer(inputs["HSI"])
+                #inputs["RGB"] = self.transformer(inputs["RGB"])
 
             return individual, inputs, label
         else:
@@ -378,7 +388,9 @@ class TreeData(LightningDataModule):
             )
             
             #Make sure we didn't miss any
-            annotations = annotations[annotations.individual.isin(rgb_annotations.individual)]
+            annotations = annotations[annotations.individualID.isin(rgb_annotations.individualID)]
+            rgb_annotations["RGB_image_path"] = rgb_annotations["image_path"]
+            annotations = annotations.merge(rgb_annotations[["individualID","RGB_image_path"]], on="individualID")
             
             if self.comet_logger:
                 self.comet_logger.experiment.log_parameter("Species after crop generation",len(annotations.taxonID.unique()))

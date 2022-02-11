@@ -6,7 +6,7 @@ import os
 import glob
 import rasterio as rio
 from src import data
-from src.models import Hang2020
+from src.models import RGB
 from src.models import dead
 from src import main
 from src import utils
@@ -137,7 +137,7 @@ def experiment():
 #Training module
 @pytest.fixture(scope="session")
 def m(config, dm, ROOT):
-    model = Hang2020.vanilla_CNN(bands=3, classes=3)
+    model = RGB.RGB_sensor_fusion(bands=3, classes=3)
     m = main.TreeModel(model=model, classes=3, config=config, label_dict=dm.species_label_dict)
     m.ROOT = "{}/tests/".format(ROOT)
     
@@ -146,7 +146,7 @@ def m(config, dm, ROOT):
 #Training module
 @pytest.fixture(scope="session")
 def species_model_path(config, dm):
-    model = Hang2020.vanilla_CNN(bands=3, classes=3)
+    model = RGB.RGB_sensor_fusion(bands=3, classes=3)
     m = main.TreeModel(model=model, classes=3, config=config, label_dict=dm.species_label_dict)
     m.ROOT = "{}/tests/".format(ROOT)
     filepath = "{}/model.pl".format(tempfile.gettempdir())

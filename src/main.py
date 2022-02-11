@@ -326,13 +326,17 @@ class TreeModel(LightningModule):
         results = results.merge(crowns.drop(columns="label"), on="individual")
         results = gpd.GeoDataFrame(results, geometry="geometry")
         HSI_pool = glob.glob(self.config["HSI_tif_dir"] +"*.tif")
+        RGB_pool = glob.glob(self.config["HSI_tif_dir"] +"*.tif")
+        
         neighbors = spatial.spatial_neighbors(
             results,
             buffer=self.config["neighbor_buffer_size"],
             model = self,
             data_dir = "{}/data/".format(self.ROOT),
             image_size=self.config["image_size"],
-            HSI_pool=HSI_pool)        
+            HSI_pool=HSI_pool,
+            RGB_pool=RGB_pool
+        )        
         
         #Spatial function
         labels, scores = spatial.spatial_smooth(neighbors, features, alpha=self.config["neighborhood_strength"])

@@ -7,14 +7,15 @@ from src.data import preprocess_image
 import torch
 from torchvision import transforms
 
-def spatial_neighbors(gdf, buffer, data_dir, HSI_pool, model, image_size):
+def spatial_neighbors(gdf, buffer, data_dir, HSI_pool,RGB_pool, model, image_size):
     """    
     #Get all neighbors within n meters of each point.
     Args:
         gdf: a geodataframe
         buffer: distance from focal point in m to search for neighbors
         data_dir: directory where the plot boxes are stored
-        HSI_pool: path to search for sensor path
+        HSI_pool: path to search for HSI sensor path
+        RGB_pool: path to search for RGB sensor data
         model: a trained main.TreeModel to predict neighbor box scores
         image_size: 
     Returns:
@@ -43,6 +44,19 @@ def spatial_neighbors(gdf, buffer, data_dir, HSI_pool, model, image_size):
             img_crop = preprocess_image(img_crop, channel_is_first=True)
             img_crop = transforms.functional.resize(img_crop, size=(image_size,image_size), interpolation=transforms.InterpolationMode.NEAREST)
             img_crop = torch.tensor(img_crop,device=model.device, dtype=torch.float32).unsqueeze(0)
+            
+            try:
+                sensor_path = find_sensor_path(lookup_pool=RGB_pool, bounds=b.bounds)       
+                rgb_img_crop = crop(bounds=b.bounds, sensor_path=sensor_path)
+            except Exception as e:
+                print("failed with {}".format(e))
+                continue
+            if rgb_img_crop.size == 0:
+                continue
+            rgb_img_crop = preprocess_image(rgb_img_crop, channel_is_first=True)
+            rgb_img_crop = transforms.functional.resize(rgb_img_crop, size=(image_size,image_size), interpolation=transforms.InterpolationMode.NEAREST)
+            rgb_img_crop = torch.tensor(rgb_img_crop,device=model.device, dtype=torch.float32).unsqueeze(0)
+            
             with torch.no_grad():
                 score = model.model(img_crop)
             scores.append(score)
