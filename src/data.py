@@ -218,7 +218,6 @@ class TreeDataset(Dataset):
                 self.image_dict[index] = load_image(row["image_path"], image_size=image_size)
                 self.RGB_image_dict[index] = load_image(row["RGB_image_path"], image_size=self.image_size)
                 
-        
     def __len__(self):
         #0th based index
         return self.annotations.shape[0]
