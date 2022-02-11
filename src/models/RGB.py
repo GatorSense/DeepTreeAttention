@@ -24,10 +24,10 @@ class RGB_sensor_fusion(nn.Module):
         #Fully connected concat learner
         self.fc1 = nn.Linear(in_features = classes *2 , out_features = classes)
     
-    def forward(self, images, metadata):
-        RGB_softmax = self.metadata_model(metadata)
-        sensor_softmax = self.sensor_model(images)
-        concat_features = cat([RGB_softmax, sensor_softmax], dim=1)
+    def forward(self, rgb_image, hsi_image):
+        rgb_features = self.RGB(rgb_image)
+        sensor_softmax = self.sensor_model(hsi_image)
+        concat_features = cat([rgb_features, sensor_softmax], dim=1)
         concat_features = self.fc1(concat_features)
         concat_features = F.relu(concat_features)
         

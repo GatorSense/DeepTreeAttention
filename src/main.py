@@ -63,8 +63,9 @@ class TreeModel(LightningModule):
         """
         #allow for empty data if data augmentation is generated
         individual, inputs, y = batch
-        images = inputs["HSI"]
-        y_hat = self.model.forward(images)
+        hsi_images = inputs["HSI"]
+        rgb_images = inputs["RGB"]        
+        y_hat = self.model.forward(hsi_images, rgb_images)
         loss = F.cross_entropy(y_hat, y)    
         
         return loss
@@ -74,14 +75,14 @@ class TreeModel(LightningModule):
         """
         #allow for empty data if data augmentation is generated
         individual, inputs, y = batch
-        images = inputs["HSI"]        
-        y_hat = self.model.forward(images)
+        hsi_images = inputs["HSI"]
+        rgb_images = inputs["RGB"]  
+        y_hat = self.model.forward(hsi_images, rgb_images)
         loss = F.cross_entropy(y_hat, y)        
         
         # Log loss and metrics
         self.log("val_loss", loss, on_epoch=True)
-        softmax_prob = F.softmax(y_hat, dim =1)
-        output = self.metrics(softmax_prob, y) 
+        output = self.metrics(y_hat, y) 
         self.log_dict(output)
         
         return loss
@@ -117,7 +118,6 @@ class TreeModel(LightningModule):
             return self.index_to_label[index]
                 
     def predict_xy(self, coordinates, fixed_box=True):
-        #TODO update for metadata model
         """Given an x,y location, find sensor data and predict tree crown class. If no predicted crown within 5m an error will be raised (fixed_box=False) or a 1m fixed box will created (fixed_box=True)
         Args:
             coordinates (tuple): x,y tuple in utm coordinates
@@ -209,13 +209,14 @@ class TreeModel(LightningModule):
     def predict(self,inputs):
         """Given a input dictionary, construct args for prediction"""
         if "cuda" == self.device.type:
-            images = inputs["HSI"]
-            images = images.cuda()
-            pred = self.model(images)
+            hsi_images = inputs["HSI"].cuda()
+            rgb_images = inputs["RGB"].cuda()
+            pred = self.model(hsi_images, rgb_images)
             pred = pred.cpu()
         else:
-            images = inputs["HSI"]
-            pred = self.model(images)
+            hsi_images = inputs["HSI"]
+            rgb_images = inputs["RGB"]
+            pred = self.model(hsi_images, rgb_images)
             
         return pred
     
