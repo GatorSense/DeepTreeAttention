@@ -1,26 +1,21 @@
 #Ligthning data module
-import argparse
 from . import __file__
 from distributed import wait
 import glob
 import geopandas as gpd
-import json
 import numpy as np
 import os
 import pandas as pd
 from pytorch_lightning import LightningDataModule
-import rasterio as rio
-from sklearn import preprocessing
 from src import generate
 from src import CHM
 from src import augmentation
 from src import megaplot
+from src.models import dead
+from src.utils import *
 from shapely.geometry import Point
 import torch
 from torch.utils.data import Dataset
-from torchvision import transforms
-import yaml
-import warnings
         
 def filter_data(path, config):
     """Transform raw NEON data into clean shapefile   
@@ -28,7 +23,7 @@ def filter_data(path, config):
         config: DeepTreeAttention config dict, see config.yml
     """
     field = pd.read_csv(path)
-    field = field[~field.elevation.isnull()]
+    field = field[~field.itcEasting.isnull()]
     field = field[~field.growthForm.isin(["liana","small shrub"])]
     field = field[~field.growthForm.isnull()]
     field = field[~field.plantStatus.isnull()]        
@@ -100,7 +95,13 @@ def sample_plots(shp, min_train_samples=5, min_test_samples=3, iteration = 1):
         iteration: a dummy parameter to make dask submission unique
     """
     #split by plot level
-    plotIDs = list(shp.plotID.unique())
+    plotIDs = list(shp[shp.siteID.isin(["OSBS","JERC","DSNY","TALL","LENO","DELA"])].plotID.unique())
+    if len(plotIDs) == 0:
+        test = shp[shp.plotID == shp.plotID.unique()[0]]
+        train = shp[shp.plotID == shp.plotID.unique()[1]]
+        
+        return train, test
+                
     np.random.shuffle(plotIDs)
     test = shp[shp.plotID == plotIDs[0]]
     
@@ -116,19 +117,13 @@ def sample_plots(shp, min_train_samples=5, min_test_samples=3, iteration = 1):
             
     train = shp[~shp.plotID.isin(test.plotID.unique())]
     
-    #if debug
-    if train.empty:
-        test = shp[shp.plotID == shp.plotID.unique()[0]]
-        train = shp[shp.plotID == shp.plotID.unique()[1]]
-    
     #remove fixed boxes from test
-    test = test.loc[~test["box_id"].str.contains("fixed").fillna(False)]
-    
     test = test.groupby("taxonID").filter(lambda x: x.shape[0] >= min_test_samples)
-    train = train.groupby("taxonID").filter(lambda x: x.shape[0] >= min_train_samples)
-    
-    train = train[train.taxonID.isin(test.taxonID)]
+    train_keep = train[train.siteID.isin(["OSBS","JERC","DSNY","TALL","LENO","DELA"])].groupby("taxonID").filter(lambda x: x.shape[0] >= min_train_samples)
+    train = train[train.taxonID.isin(train_keep.taxonID.unique())]
+    train = train[train.taxonID.isin(test.taxonID)]    
     test = test[test.taxonID.isin(train.taxonID)]
+    test = test.loc[~test["box_id"].astype(str).str.contains("fixed").fillna(False)]
     
     return train, test
     
@@ -182,7 +177,7 @@ def train_test_split(shp, config, client = None):
     # The size of the datasets
     if len(ties) > 1:
         print("The size of tied datasets with {} species is {}".format(test_species, [x[1].shape[0] for x in ties]))        
-        saved_train, saved_test = ties[np.argmin([x[1].shape[0] for x in ties])]
+        saved_train, saved_test = ties[np.argmax([x[1].shape[0] for x in ties])]
         
     train = saved_train
     test = saved_test    
@@ -192,57 +187,6 @@ def train_test_split(shp, config, client = None):
     train["point_id"] = train.index.values
     
     return train, test
-        
-def read_config(config_path):
-    """Read config yaml file"""
-    
-    #Allow command line to override 
-    parser = argparse.ArgumentParser("DeepTreeAttention config")
-    parser.add_argument('-d', '--my-dict', type=json.loads, default=None)
-    args = parser.parse_known_args()
-    try:
-        with open(config_path, 'r') as f:
-            config = yaml.load(f, Loader=yaml.FullLoader)
-
-    except Exception as e:
-        raise FileNotFoundError("There is no config at {}, yields {}".format(
-            config_path, e))
-    
-    #Update anything in argparse to have higher priority
-    if args[0].my_dict:
-        for key, value in args[0].my_dict:
-            config[key] = value
-        
-    return config
-
-def preprocess_image(image, channel_is_first=False):
-    """Preprocess a loaded image, if already C*H*W set channel_is_first=True"""
-    img = np.asarray(image, dtype='float32')
-    data = img.reshape(img.shape[0], np.prod(img.shape[1:]))
-    
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', UserWarning)    
-        data  = preprocessing.scale(data)
-    img = data.reshape(img.shape)
-    
-    if not channel_is_first:
-        img = np.rollaxis(img, 2,0)
-        
-    normalized = torch.from_numpy(img)
-    
-    return normalized
-
-def load_image(img_path, image_size):
-    """Load and preprocess an image for training/prediction"""
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', rio.errors.NotGeoreferencedWarning)
-        image = rio.open(img_path).read()       
-    image = preprocess_image(image, channel_is_first=True)
-    
-    #resize image
-    image = transforms.functional.resize(image, size=(image_size,image_size), interpolation=transforms.InterpolationMode.NEAREST)
-    
-    return image
 
 #Dataset class
 class TreeDataset(Dataset):
@@ -303,13 +247,23 @@ class TreeDataset(Dataset):
         else:
             return individual, inputs
 
+def filter_dead_annotations(crowns, config):
+    """Given a set of annotations, predict whether RGB is dead
+    Args:
+        annotations: must contain xmin, xmax, ymin, ymax and image path fields"""
+    ds = dead.utm_dataset(crowns, config=config)
+    dead_model = dead.AliveDead.load_from_checkpoint(config["dead_model"])    
+    label, score = dead.predict_dead_dataloader(dead_model=dead_model, dataset=ds, config=config)
+    
+    return label, score
+    
 class TreeData(LightningDataModule):
     """
     Lightning data module to convert raw NEON data into HSI pixel crops based on the config.yml file. 
     The module checkpoints the different phases of setup, if one stage failed it will restart from that stage. 
     Use regenerate=True to override this behavior in setup()
     """
-    def __init__(self, csv_file, HSI=True, metadata=False, regenerate = False, client = None, config=None, data_dir=None, comet_logger=None, debug=False):
+    def __init__(self, csv_file, HSI=True, metadata=False, client = None, config=None, data_dir=None, comet_logger=None, debug=False):
         """
         Args:
             config: optional config file to override
@@ -319,7 +273,6 @@ class TreeData(LightningDataModule):
         """
         super().__init__()
         self.ROOT = os.path.dirname(os.path.dirname(__file__))
-        self.regenerate=regenerate
         self.csv_file = csv_file
         self.HSI = HSI
         self.metadata = metadata
@@ -342,7 +295,7 @@ class TreeData(LightningDataModule):
                 
     def setup(self,stage=None):
         #Clean data from raw csv, regenerate from scratch or check for progress and complete
-        if self.regenerate:
+        if self.config["regenerate"]:
             if self.config["replace"]:#remove any previous runs
                 try:
                     os.remove("{}/processed/canopy_points.shp".format(self.data_dir))
@@ -355,22 +308,29 @@ class TreeData(LightningDataModule):
                     
                 #Convert raw neon data to x,y tree locatins
                 df = filter_data(self.csv_file, config=self.config)
-                
+                    
                 #load any megaplot data
                 if not self.config["megaplot_dir"] is None:
                     megaplot_data = megaplot.load(directory=self.config["megaplot_dir"], config=self.config)
+                    megaplot_data = megaplot_data[megaplot_data.siteID=="OSBS"]
                     df = pd.concat([megaplot_data, df])
-                    
-                #Just one site
-                if not self.debug:
-                    df = df[df.siteID.isin(["OSBS","JERC","DSNY","TALL","LENO","DELA"])]
                 
+                if not self.debug:
+                    southeast = df[df.siteID.isin(["OSBS","LENO","TALL","DELA","DSNY","JERC"])]
+                    southeast = southeast.taxonID.unique()
+                    plotIDs_to_keep = df[df.taxonID.isin(southeast)].plotID.unique()
+                    df = df[df.plotID.isin(plotIDs_to_keep)]
+                    
                 if self.comet_logger:
                     self.comet_logger.experiment.log_parameter("Species before CHM filter",len(df.taxonID.unique()))
                     self.comet_logger.experiment.log_parameter("Samples before CHM filter",df.shape[0])
                     
                 #Filter points based on LiDAR height
-                df = CHM.filter_CHM(df, CHM_pool=self.config["CHM_pool"],min_CHM_diff=self.config["min_CHM_diff"], min_CHM_height=self.config["min_CHM_height"])      
+                df = CHM.filter_CHM(df, CHM_pool=self.config["CHM_pool"],
+                                    min_CHM_height=self.config["min_CHM_height"], 
+                                    max_CHM_diff=self.config["max_CHM_diff"], 
+                                    CHM_height_limit=self.config["CHM_height_limit"])  
+                
                 df.to_file("{}/processed/canopy_points.shp".format(self.data_dir))
                 
                 if self.comet_logger:
@@ -382,7 +342,7 @@ class TreeData(LightningDataModule):
                     field_data="{}/processed/canopy_points.shp".format(self.data_dir),
                     rgb_dir=self.config["rgb_sensor_pool"],
                     savedir="{}/interim/".format(self.data_dir),
-                    raw_box_savedir=None, 
+                    raw_box_savedir="{}/interim/".format(self.data_dir), 
                     client=self.client
                 )
                 
@@ -409,6 +369,17 @@ class TreeData(LightningDataModule):
             if self.comet_logger:
                 self.comet_logger.experiment.log_parameter("Species after crop generation",len(annotations.taxonID.unique()))
                 self.comet_logger.experiment.log_parameter("Samples after crop generation",annotations.shape[0])
+            
+            #Dead filter
+            #dead_label, dead_score = filter_dead_annotations(crowns, config=self.config)
+            #crowns["dead_label"] = dead_label
+            #crowns["dead_score"] = dead_score
+            #individuals_to_keep = crowns[~((dead_label == 1) & (dead_score > self.config["dead_threshold"]))].individual
+            #annotations = annotations[annotations.individualID.isin(individuals_to_keep)]
+            
+            #if self.comet_logger:
+                #self.comet_logger.experiment.log_parameter("Species after dead filtering",len(annotations.taxonID.unique()))
+                #self.comet_logger.experiment.log_parameter("Samples after dead filtering",annotations.shape[0])
                         
             if self.config["new_train_test_split"]:
                 train_annotations, test_annotations = train_test_split(annotations,config=self.config, client=self.client)   
@@ -474,6 +445,7 @@ class TreeData(LightningDataModule):
             self.val_ds = TreeDataset(csv_file = "{}/processed/test.csv".format(self.data_dir), config=self.config, HSI=self.HSI, metadata=self.metadata)
              
         else:
+            print("Loading previous run")
             train_annotations = pd.read_csv("{}/processed/train.csv".format(self.data_dir))
             test_annotations = pd.read_csv("{}/processed/test.csv".format(self.data_dir))
             
@@ -504,8 +476,7 @@ class TreeData(LightningDataModule):
             self.val_ds = TreeDataset(csv_file = "{}/processed/test.csv".format(self.data_dir), config=self.config, HSI=self.HSI, metadata=self.metadata)            
 
     def train_dataloader(self):
-        """Load a training file. The default location is saved during self.setup(), to override this location, set self.train_file before training"""       
-        
+        """Load a training file. The default location is saved during self.setup(), to override this location, set self.train_file before training"""               
         #get class weights
         train = pd.read_csv(self.train_file)
         class_weights = train.label.value_counts().to_dict()     
@@ -515,16 +486,18 @@ class TreeData(LightningDataModule):
         for idx in range(len(self.train_ds)):
             path, image, targets = self.train_ds[idx]
             label = int(targets.numpy())
-            image_weight = class_weights[label]
-            data_weights.append(1/image_weight)
+            class_freq = class_weights[label]
+            #under sample majority classes
+            if class_freq > 50:
+                class_freq = 50
+            data_weights.append(1/class_freq)
             
         sampler = torch.utils.data.sampler.WeightedRandomSampler(weights = data_weights, num_samples=len(self.train_ds))
         data_loader = torch.utils.data.DataLoader(
             self.train_ds,
+            sampler = sampler,
             batch_size=self.config["batch_size"],
-            num_workers=self.config["workers"],
-            sampler=sampler
-        )
+            num_workers=self.config["workers"])
         
         return data_loader
     

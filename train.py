@@ -11,20 +11,19 @@ from src import metrics
 from pytorch_lightning import Trainer
 import subprocess
 from pytorch_lightning.loggers import CometLogger
-from pytorch_lightning.profiler import AdvancedProfiler
-
+from pytorch_lightning.callbacks import LearningRateMonitor
 import pandas as pd
 from pandas.util import hash_pandas_object
 
 #Create datamodule
 config = data.read_config("config.yml")
 if config["regenerate"]:
-    client = start_cluster.start(cpus=50, mem_size="5GB")
+    client = start_cluster.start(cpus=75, mem_size="5GB")
 else:
     client = None
 
 comet_logger = CometLogger(project_name="DeepTreeAttention", workspace=config["comet_workspace"],auto_output_logging = "simple")    
-data_module = data.TreeData(csv_file="data/raw/neon_vst_data_2021.csv", regenerate=config["regenerate"], client=client, metadata=True, comet_logger=comet_logger)
+data_module = data.TreeData(csv_file="data/raw/neon_vst_data_2022.csv", client=client, metadata=True, comet_logger=comet_logger)
 data_module.setup()
 if client:
     client.close()
@@ -58,15 +57,19 @@ m = main.TreeModel(
 comet_logger.experiment.log_parameters(m.config)
 
 #Create trainer
+lr_monitor = LearningRateMonitor(logging_interval='epoch')
 trainer = Trainer(
     gpus=data_module.config["gpus"],
     fast_dev_run=data_module.config["fast_dev_run"],
     max_epochs=data_module.config["epochs"],
     accelerator=data_module.config["accelerator"],
     checkpoint_callback=False,
+    callbacks=[lr_monitor],
     logger=comet_logger)
 
 trainer.fit(m, datamodule=data_module)
+#Save model checkpoint
+trainer.save_checkpoint("/blue/ewhite/b.weinstein/DeepTreeAttention/snapshots/{}.pl".format(comet_logger.experiment.id))
 results = m.evaluate_crowns(data_module.val_dataloader(), experiment=comet_logger.experiment)
 
 rgb_pool = glob.glob(data_module.config["rgb_sensor_pool"], recursive=True)
@@ -92,3 +95,9 @@ comet_logger.experiment.log_table("test_predictions.csv", results)
 site_lists = train.groupby("label").site.unique()
 within_site_confusion = metrics.site_confusion(y_true = results.label, y_pred = results.pred_label_top1, site_lists=site_lists)
 comet_logger.experiment.log_metric("within_site_confusion", within_site_confusion)
+
+#Within plot confusion
+plot_lists = train.groupby("label").plotID.unique()
+within_plot_confusion = metrics.site_confusion(y_true = results.label, y_pred = results.pred_label_top1, site_lists=plot_lists)
+comet_logger.experiment.log_metric("within_plot_confusion", within_plot_confusion)
+
