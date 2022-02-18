@@ -103,18 +103,21 @@ def sample_plots(shp, min_train_samples=5, min_test_samples=3, iteration = 1):
         return train, test
                 
     np.random.shuffle(plotIDs)
-    test = shp[shp.plotID == plotIDs[0]]
-    
-    for plotID in plotIDs[1:]:
-        include = False
+    species_to_sample = shp.taxonID.unique()
+    test_plots = []
+    for plotID in plotIDs:
         selected_plot = shp[shp.plotID == plotID]
         # If any species is missing from min samples, include plot
         for x in selected_plot.taxonID.unique():
-            if sum(test.taxonID == x) < min_test_samples:
-                include = True
-        if include:
-            test = pd.concat([test,selected_plot])
+            if x in species_to_sample:
+                test_plots.append(plotID)
+                break
+        
+        #update species list
+        counts = shp[~shp.plotID.isin(test_plots)].taxonID.value_counts()
+        species_to_sample = counts[counts < min_test_samples].index.tolist()
             
+    test = shp[~shp.plotID.isin(test_plots)]
     train = shp[~shp.plotID.isin(test.plotID.unique())]
     
     #remove fixed boxes from test
@@ -194,20 +197,16 @@ class TreeDataset(Dataset):
     Args:
        csv_file: path to csv file with image_path and label
     """
-    def __init__(self, csv_file, image_size=10, config=None, train=True, HSI=True, metadata=False):
+    def __init__(self, csv_file, config=None, train=True, HSI=True, metadata=False):
         self.annotations = pd.read_csv(csv_file)
         self.train = train
         self.HSI = HSI
         self.metadata = metadata
         self.config = config 
-        
-        if self.config:
-            self.image_size = config["image_size"]
-        else:
-            self.image_size = image_size
-        
+        self.image_size = config["image_size"]
+          
         #Create augmentor
-        self.transformer = augmentation.train_augmentation(image_size=image_size)
+        self.transformer = augmentation.train_augmentation(image_size=self.image_size)
         
         #Pin data to memory if desired
         if self.config["preload_images"]:
@@ -215,7 +214,7 @@ class TreeDataset(Dataset):
             self.RGB_image_dict = {}
             
             for index, row in self.annotations.iterrows():
-                self.image_dict[index] = load_image(row["image_path"], image_size=image_size)
+                self.image_dict[index] = load_image(row["image_path"], image_size=self.image_size)
                 self.RGB_image_dict[index] = load_image(row["RGB_image_path"], image_size=self.image_size)
                 
     def __len__(self):
@@ -236,7 +235,6 @@ class TreeDataset(Dataset):
                 image = load_image(image_path, image_size=self.image_size)
                 inputs["HSI"] = image
                 inputs["RGB"] = load_image(RGB_image_path, image_size=self.image_size)
-                
             
         if self.metadata:
             site = self.annotations.site.loc[index]  
@@ -248,9 +246,9 @@ class TreeDataset(Dataset):
             label = torch.tensor(label, dtype=torch.long)
             
             #For the moment, no augmentation
-            #if self.HSI:
-                #inputs["HSI"] = self.transformer(inputs["HSI"])
-                #inputs["RGB"] = self.transformer(inputs["RGB"])
+            if self.HSI:
+                inputs["HSI"] = self.transformer(inputs["HSI"])
+                inputs["RGB"] = self.transformer(inputs["RGB"])
 
             return individual, inputs, label
         else:
@@ -396,7 +394,7 @@ class TreeData(LightningDataModule):
             if self.comet_logger:
                 self.comet_logger.experiment.log_parameter("Species after crop generation",len(annotations.taxonID.unique()))
                 self.comet_logger.experiment.log_parameter("Samples after crop generation",annotations.shape[0])
-
+                        
             if self.config["new_train_test_split"]:
                 train_annotations, test_annotations = train_test_split(annotations,config=self.config, client=self.client)   
             else:

@@ -47,8 +47,7 @@ comet_logger.experiment.log_table("train.csv", train)
 comet_logger.experiment.log_table("test.csv", test)
 comet_logger.experiment.log_table("novel_species.csv", novel)
 
-#model = metadata.metadata_sensor_fusion(sites=data_module.num_sites, classes=data_module.num_classes, bands=data_module.config["bands"])
-model = RGB.RGB_sensor_fusion(classes=data_module.num_classes, bands=data_module.config["bands"])
+model = RGB.Hang2020(classes=data_module.num_classes, bands=data_module.config["bands"])
 m = main.TreeModel(
     model=model, 
     classes=data_module.num_classes, 

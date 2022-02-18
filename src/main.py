@@ -65,7 +65,7 @@ class TreeModel(LightningModule):
         individual, inputs, y = batch
         hsi_images = inputs["HSI"]
         rgb_images = inputs["RGB"]        
-        y_hat = self.model.forward(hsi_image = hsi_images, rgb_image = rgb_images)
+        y_hat = self.model.forward(hsi_images, rgb_images)
         loss = F.cross_entropy(y_hat, y)    
         
         return loss
@@ -77,14 +77,14 @@ class TreeModel(LightningModule):
         individual, inputs, y = batch
         hsi_images = inputs["HSI"]
         rgb_images = inputs["RGB"]  
-        y_hat = self.model.forward(hsi_image = hsi_images, rgb_image = rgb_images)
+        y_hat = self.model.forward(hsi_images, rgb_images)
         loss = F.cross_entropy(y_hat, y)        
         
         # Log loss and metrics
         self.log("val_loss", loss, on_epoch=True)
         output = self.metrics(y_hat, y) 
         self.log_dict(output)
-        
+
         return loss
     
     def configure_optimizers(self):

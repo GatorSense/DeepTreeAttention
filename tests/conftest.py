@@ -100,6 +100,7 @@ def config(ROOT, dead_model_path):
     config["min_train_samples"] = 1
     config["min_test_samples"] = 1
     config["crop_dir"] = tempfile.gettempdir()
+    config["RGB_crop_dir"] = tempfile.gettempdir()    
     config["bands"] = 3
     config["classes"] = 3
     config["top_k"] = 1
@@ -109,9 +110,7 @@ def config(ROOT, dead_model_path):
     config["dead_model"] = dead_model_path
     config["dead_threshold"] = 1
     config["megaplot_dir"] = None
-    config["RGB_crop_dir"] = tempfile.gettempdir()
-    
-    
+
     return config
 
 #Data module
@@ -137,7 +136,7 @@ def experiment():
 #Training module
 @pytest.fixture(scope="session")
 def m(config, dm, ROOT):
-    model = RGB.RGB_sensor_fusion(bands=3, classes=3)
+    model = RGB.Hang2020(bands=3, classes=3)
     m = main.TreeModel(model=model, classes=3, config=config, label_dict=dm.species_label_dict)
     m.ROOT = "{}/tests/".format(ROOT)
     
@@ -146,7 +145,7 @@ def m(config, dm, ROOT):
 #Training module
 @pytest.fixture(scope="session")
 def species_model_path(config, dm):
-    model = RGB.RGB_sensor_fusion(bands=3, classes=3)
+    model = RGB.Hang2020(bands=3, classes=3)
     m = main.TreeModel(model=model, classes=3, config=config, label_dict=dm.species_label_dict)
     m.ROOT = "{}/tests/".format(ROOT)
     filepath = "{}/model.pl".format(tempfile.gettempdir())
