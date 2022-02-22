@@ -71,7 +71,6 @@ class TreeModel(LightningModule):
 
         return loss
 
-
     def validation_step(self, batch, batch_idx):
         """Calculate val loss
         """
