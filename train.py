@@ -8,6 +8,7 @@ from src import start_cluster
 from src.models import Hang2020
 from src import visualize
 from src import metrics
+import torch
 from pytorch_lightning import Trainer
 import subprocess
 from pytorch_lightning.loggers import CometLogger
@@ -67,8 +68,12 @@ trainer = Trainer(
     logger=comet_logger)
 
 trainer.fit(m, datamodule=data_module)
-#Save model checkpoint
+
+# Save model checkpoint
 trainer.save_checkpoint("/blue/ewhite/b.weinstein/DeepTreeAttention/snapshots/{}.pl".format(comet_logger.experiment.id))
+torch.save(m.model.state_dict(),"/blue/ewhite/b.weinstein/DeepTreeAttention/snapshots/{}.pt".format(comet_logger.experiment.id))
+
+# Evaluate
 results = m.evaluate_crowns(data_module.val_dataloader(), experiment=comet_logger.experiment)
 
 rgb_pool = glob.glob(data_module.config["rgb_sensor_pool"], recursive=True)
