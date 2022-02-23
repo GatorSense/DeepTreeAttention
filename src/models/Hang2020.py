@@ -56,7 +56,7 @@ class Classifier(Module):
     """A small module to seperate the classifier head, which depends on the number of classes.
     This makes it easier to pretain on other data
     """
-    def __init(self, in_features, classes):
+    def __init__(self, in_features, classes):
         super(Classifier,self).__init__()        
         self.fc1 = nn.Linear(in_features=in_features, out_features=classes)
     
@@ -69,7 +69,7 @@ class spatial_attention(Module):
     """
     Learn cross band spatial features with a set of convolutions and spectral pooling attention layers
     """
-    def __init__(self, filters, classes):
+    def __init__(self, filters):
         super(spatial_attention,self).__init__()
         self.channel_pool = nn.Conv2d(in_channels=filters, out_channels=1, kernel_size=1)
         
@@ -171,7 +171,7 @@ class spatial_network(Module):
     """
         Learn spatial features with alternating convolutional and attention pooling layers
     """
-    def __init__(self, bands):
+    def __init__(self, bands, classes):
         super(spatial_network, self).__init__()
         
         #First submodel is 32 filters
@@ -213,15 +213,15 @@ class spectral_network(Module):
         #First submodel is 32 filters
         self.conv1 = conv_module(in_channels=bands, filters=32)
         self.attention_1 = spectral_attention(filters=32)
-        self.classifier1 = Classifier(classes=classes, in_features=128)
+        self.classifier1 = Classifier(classes=classes, in_features=32)
     
         self.conv2 = conv_module(in_channels=32, filters=64, maxpool_kernel=(2,2))
         self.attention_2 = spectral_attention(filters=64)
-        self.classifier2 = Classifier(classes=classes, in_features=256)
+        self.classifier2 = Classifier(classes=classes, in_features=64)
     
         self.conv3 = conv_module(in_channels=64, filters=128, maxpool_kernel=(2,2))
         self.attention_3 = spectral_attention(filters=128)
-        self.classifier3 = Classifier(classes=classes, in_features=512)
+        self.classifier3 = Classifier(classes=classes, in_features=128)
     
     def forward(self, x):
         """The forward method is written for training the joint scores of the three attention layers"""
