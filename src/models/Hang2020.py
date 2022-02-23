@@ -263,3 +263,16 @@ class Hang2020(Module):
         return joint_score
         
     
+def load_from_backbone(state_dict, classes, bands):
+    train_state_dict = torch.load(state_dict, map_location="cpu")
+    model = Hang2020(classes=classes, bands=bands)
+    dict_to_update = model.state_dict()
+    
+    #update weights from non-classifier layers
+    pretrained_dict = {k: v for k, v in train_state_dict().items() if not "classifier" in k}
+    dict_to_update.update(pretrained_dict)
+    model.load_state_dict(dict_to_update)
+    
+    return model
+    
+    
