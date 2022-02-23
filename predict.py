@@ -39,7 +39,7 @@ tiles = find_rgb_files(site="OSBS", config=config, year="2019")
 hyperspectral_pool = glob(config["HSI_sensor_pool"], recursive=True)
 rgb_pool = glob(config["rgb_sensor_pool"], recursive=True)
 
-cpu_client = start(cpus=75)
+cpu_client = start(cpus=1)
 
 tif_futures = cpu_client.map(convert, tiles, hyperspectral_pool=hyperspectral_pool, savedir = config["HSI_tif_dir"], year="2019")
 wait(tif_futures)
@@ -58,7 +58,7 @@ if crop_sensor:
 else:
     cpu_client.close()
     
-gpu_client = start(gpus=10, mem_size="50GB")
+gpu_client = start(gpus=1, mem_size="50GB")
 
 #No daemonic dask children
 config["workers"] = 0
