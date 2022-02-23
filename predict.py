@@ -53,11 +53,7 @@ for x in tif_futures:
     except:
         pass
 
-if crop_sensor:
-    pass
-else:
-    cpu_client.close()
-    
+cpu_client.close()    
 gpu_client = start(gpus=1, mem_size="50GB")
 
 #No daemonic dask children
